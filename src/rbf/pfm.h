@@ -41,7 +41,7 @@ public:
     unsigned readPageCounter;
     unsigned writePageCounter;
     unsigned appendPageCounter;
-    
+
     FileHandle();                                                         // Default constructor
     ~FileHandle();                                                        // Destructor
 
@@ -55,7 +55,7 @@ public:
     void setFile(FILE * fn);
 private:
     FILE * fileName;
-}; 
+};
 
 
 #endif

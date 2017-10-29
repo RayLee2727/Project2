@@ -8,6 +8,7 @@
 #include <cstring>
 #include <unordered_set>
 #include <cmath>
+#include<set>
 
 #include "../rbf/pfm.h"
 
@@ -81,6 +82,25 @@ public:
   // "data" follows the same format as RecordBasedFileManager::insertRecord().
   RC getNextRecord(RID &rid, void *data);
   RC close();
+    
+
+    FileHandle *fh;
+    vector<Attribute> recordDescriptor;
+    unsigned short int conditionAttributeIndex;
+    CompOp compOp;
+    void *value;
+    
+    set<unsigned short int> index;
+    char *page;
+    unsigned short int currSlot;
+    unsigned short int lastSlot;
+    short int currPageNum;
+    unsigned short int attributeNamesCount;
+    
+private:
+    unsigned int vc_comp(string val);
+    unsigned int int_comp(int val);
+    unsigned int float_comp(float val);
 };
 
 
@@ -150,6 +170,7 @@ private:
   static PagedFileManager *_pf_manager;
 
   unsigned short int packRecord(const vector<Attribute> &recordDescriptor, const void *data, char *record);
+  bool checkRecord(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const void *data, const RID &rid);
 
 };
 
