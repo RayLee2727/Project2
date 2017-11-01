@@ -19,6 +19,7 @@ public:
 
   // "data" follows the same format as RelationManager::insertTuple()
   RC getNextTuple(RID &rid, void *data) {
+	  rbsi->fh->openedFile = openedFile;
 	  return rbsi->getNextRecord(rid, data);
   };
   RC close() {
@@ -26,9 +27,11 @@ public:
   };
   void set_rbsi(RBFM_ScanIterator* rbsi) {
 	  this->rbsi = rbsi;
+	  openedFile = (rbsi->fh->openedFile);
   };
 private:
   RBFM_ScanIterator *rbsi;
+  FILE *openedFile;
 };
 
 
@@ -90,6 +93,9 @@ private:
   RC insertTableRecord(FileHandle &fh, const int tableId, const string name, const string ending);
   RC insertColumnRecord(FileHandle &fh, const int tableId, const string name, const int colType, const int colLength, const int colPos);
 
+//added
+  vector<Attribute> tableAttrInRecord();
+  vector<Attribute> columnAttrInRecord();
 
 protected:
   RelationManager();

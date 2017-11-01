@@ -53,19 +53,22 @@ RC RelationManager::createCatalog()
     // insert table records
     _rbfm->openFile("Tables.txt", fh1);
     //get table id
-    fseek(stats, 0, SEEK_SET);
-    fread(&maxID, sizeof(int), 1, stats);
-    maxID = maxID + 1;
+//    fseek(stats, 0, SEEK_SET);
+//    fread(&maxID, sizeof(int), 1, stats);
+//    maxID = maxID + 1;
+
+    //tables's table-id is 1; columns's table-id is 2
+
     //insert record
-    insertTableRecord(fh1, maxID,   "Tables",  "Tables.txt");
-    insertTableRecord(fh1, maxID+1, "Columns", "Columns.txt");
+    insertTableRecord(fh1, 1,   "Tables",  "Tables.txt");
+    insertTableRecord(fh1, 2, "Columns", "Columns.txt");
 
     _rbfm->closeFile(fh1);
     // set table id
-    fseek(stats, 0, SEEK_SET);
-    fwrite(&maxID, sizeof(int), 1, stats);
-    fflush(stats);
-    table_rc = 0;
+//    fseek(stats, 0, SEEK_SET);
+//    fwrite(&maxID, sizeof(int), 1, stats);
+//    fflush(stats);
+//    table_rc = 0;
 
     // insert column records
     _rbfm->openFile("Columns.txt", fh2);
@@ -73,7 +76,6 @@ RC RelationManager::createCatalog()
     insertColumnRecord(fh2, 1, "table-id",   TypeInt,      4, 1);
     insertColumnRecord(fh2, 1, "table-name", TypeVarChar, 50, 2);
     insertColumnRecord(fh2, 1, "file-name",  TypeVarChar, 50, 3);
-//    insertColumnRecord(fh2, 1, "privileged", TypeInt,      4, 4);
 
     insertColumnRecord(fh2, 2, "table-id",        TypeInt,      4, 1);
     insertColumnRecord(fh2, 2, "column-name",     TypeVarChar, 50, 2);
@@ -105,22 +107,45 @@ RC RelationManager::createTable(const string &tableName, const vector<Attribute>
    _rbfm->createFile(tableName + ".txt");
    _rbfm->openFile("Tables.txt", fh);
    // get table id
-   fseek(stats, 0, SEEK_SET);
-   fread(&maxId, sizeof(int), 1, stats);
-   maxId = maxId+1;
+//   fseek(stats, 0, SEEK_SET);
+//   fread(&maxId, sizeof(int), 1, stats);
+//   maxId = maxId+1;
 
-   // insert table record, system attribute = 1
-   insertTableRecord(fh, maxId, tableName, tableName + ".txt");
+
+
    // set table id
-   fseek(stats, 0, SEEK_SET);
-   fwrite(&maxId, sizeof(int), 1, stats);
-   fflush(stats);
+//   fseek(stats, 0, SEEK_SET);
+//   fwrite(&maxId, sizeof(int), 1, stats);
+//   fflush(stats);
+
+   //get Tid
+   char* pg = (char*)malloc(PAGE_SIZE);
+   fh.readPage(fh.getNumberOfPages() - 1, pg);
+   unsigned short int lastSlot;
+   memcpy(&lastSlot, &pg[PAGE_SIZE - 4], sizeof(unsigned short int));
+   vector<Attribute> tblAttrs;
+   getTableAttr(tblAttrs);
+   RID rid;
+   rid.pageNum = fh.getNumberOfPages() - 1;
+   rid.slotNum = lastSlot;
+   char* data = (char*)malloc(sizeof(int) + 1);
+   _rbfm->readAttribute(fh, tblAttrs, rid, "table-id", data);
+   int currTid;
+   memcpy(&currTid, data + 1, sizeof(int));
+   while(currTid == 0 && rid.pageNum != 0) {
+	   rid.pageNum--;
+	   _rbfm->readAttribute(fh, tblAttrs, rid, "table-id", data);
+	   memcpy(&currTid, data + 1, sizeof(int));
+   }
+   //insert
+   insertTableRecord(fh, currTid + 1, tableName, tableName + ".txt");
+
    _rbfm->closeFile(fh);
    _rbfm->openFile("Columns.txt", fh);
 
    for(; i < attrs.size(); i++) {
       Attribute attr = attrs.at(i);
-      insertColumnRecord(fh, maxId, attr.name, attr.type, attr.length, i+1);
+      insertColumnRecord(fh, currTid + 1, attr.name, attr.type, attr.length, i+1);
    }
 
    _rbfm->closeFile(fh);
@@ -156,7 +181,6 @@ RC RelationManager::insertTableRecord(FileHandle &fh, const int tableId, const s
 
    _rbfm->insertRecord(fh, recordDescriptor, record, rid);
    _rbfm->readRecord(fh, recordDescriptor, rid, finalRecord);
-
    free(null);
    free(finalRecord);
    free(record);
@@ -194,7 +218,6 @@ RC RelationManager::insertColumnRecord(FileHandle &fh, const int tableId, const 
 
    _rbfm->insertRecord(fh, recordDescriptor, record, rid);
    _rbfm->readRecord(fh, recordDescriptor, rid, finalRecord);
-
    free(nullsIndicator);
    free(finalRecord);
    free(record);
@@ -204,6 +227,7 @@ RC RelationManager::insertColumnRecord(FileHandle &fh, const int tableId, const 
 
 RC RelationManager::deleteTable(const string &tableName)
 {
+	if(tableName == "Tables" || tableName == "Columns") return -1;
     FileHandle fh1;FileHandle fh2;
     _rbfm->openFile("Tables.txt", fh1);
 
@@ -213,16 +237,21 @@ RC RelationManager::deleteTable(const string &tableName)
     vector<string> tableAttrs;
     tableAttrs.push_back("table-id");
 
+    char* data = (char*)malloc(PAGE_SIZE);
+    int tableId;
+
     int rc = _rbfm->scan(fh1, vec_table(), "table-name", EQ_OP, tableName.c_str(), tableAttrs, rbsi);
     if (rc!=0) {cout << "error: scan" << endl; return -1;}
-
+    while(rbsi.getNextRecord(rid, data) != RM_EOF) {
+    	memcpy(&tableId, data + 1, sizeof(int));
+    }
     rbsi.close();
     _rbfm->deleteRecord(fh1, vec_table(), rid);
     _rbfm->closeFile(fh1);
 
-    int tableId;
+
     void *finalData = malloc(PAGE_SIZE);
-    memcpy(&tableId, (char *)finalData + 1, sizeof(int));
+//    memcpy(&tableId, (char *)finalData + 1, sizeof(int));
 
     _rbfm->openFile("Columns.txt", fh2);
 
@@ -246,51 +275,152 @@ RC RelationManager::deleteTable(const string &tableName)
 
 RC RelationManager::getAttributes(const string &tableName, vector<Attribute> &attrs)
 {
-    if (tableName == "Tables.txt") {
-    	getTableAttr(attrs);
-    	return 0;
+    FileHandle fh1, fh2;
+    int rc0 = _rbfm->openFile("Tables.txt", fh1);
+    if(rc0 != 0) {
+        _rbfm->closeFile(fh1);
+        cout << "error in open file" << endl;
+        return -1;
     }
-    if (tableName == "Columns.txt") {
-    	getColumnAttr(attrs);
-    	return 0;
+
+    RBFM_ScanIterator rbsi;RID rid;
+    RM_ScanIterator rmsi;
+    vector<string> tableAttrs;
+    tableAttrs.push_back("table-id");
+
+    int rc1 = _rbfm->scan(fh1, tableAttrInRecord(), "table-name", EQ_OP, tableName.c_str(), tableAttrs, rbsi);
+    if(rc1 != 0) {
+       _rbfm->closeFile(fh1);
+        rbsi.close();
+        cout << "error in scan table" << endl;
+        return -1;
     }
 
-    RM_ScanIterator columnRsi;
-    RID rid;
-    void *data = malloc(PAGE_SIZE);
-    memset(data, 0, PAGE_SIZE);
-    vector<string> returnAttr;
-    Attribute attr;
-    int tid;
-    returnAttr.push_back("column-name");
-    returnAttr.push_back("column-type");
-    returnAttr.push_back("column-length");
-
-    string tn;
-    tn = tableName + ".txt";
-    if(getTidByTname(tn, tid) != 0) return -1;
-    if(scan("Columns.txt", "table-id", EQ_OP, &tid, returnAttr, columnRsi) != 0) return -1;
-    while(columnRsi.getNextTuple(rid, data) != RM_EOF) {
-    	int len;
-    	int offset = 0;
-
-    	memcpy(&len, (char*)data, sizeof(int));
-    	offset += sizeof(int);
-    	char* charAttrName = (char*)malloc(len + 1);
-    	charAttrName[len] = '\0';
-    	memcpy(charAttrName, (char*)data + offset, len);
-    	attr.name = charAttrName;
-    	offset += len;
-
-    	memcpy(&attr.type, (char*)data + offset, sizeof(int));
-    	offset += sizeof(int);
-
-    	memcpy(&attr.length, (char*)data + offset, sizeof(int));
-
-    	attrs.push_back(attr);
+    void *returnedData = malloc(PAGE_SIZE);
+//    if(rmsi.getNextTuple(rid, returnedData) == RM_EOF){
+    if(rbsi.getNextRecord(rid, returnedData) == RM_EOF) {
+        _rbfm->closeFile(fh1);
+        rbsi.close();
+        free(returnedData);
+        cout << "error in get next record" << endl;
+        return -1;
     }
-    columnRsi.close();
-	return 0;
+
+    _rbfm->closeFile(fh1);
+    rbsi.close();
+
+    int tableId;
+    memcpy(&tableId, (char *)returnedData + 1, sizeof(int));
+
+    int rc2 = _rbfm->openFile("Columns.txt", fh2);
+    if(rc2 != 0) {
+        _rbfm->closeFile(fh2);
+        cout << "error in open file" << endl;
+        return -1;
+    }
+
+    vector<string> returnAttrs;
+    returnAttrs.push_back("column-name");
+    returnAttrs.push_back("column-type");
+    returnAttrs.push_back("column-length");
+
+    int rc3 = _rbfm->scan(fh2, columnAttrInRecord(), "table-id", EQ_OP, (void *)&tableId, returnAttrs, rbsi);
+    if(rc3 != 0) {
+        _rbfm->closeFile(fh2);
+        rbsi.close();
+        free(returnedData);
+        cout << "error in scan column" << endl;
+        return -1;
+    }
+
+    int attrOffset=0;
+    string attrString;
+    int attrType;
+    int attrLen;
+    int count = 5;
+    while(rbsi.getNextRecord(rid, returnedData) != RM_EOF) {
+    	//ZL_MODIFY
+//    	if (count == 0) count--;
+    	//mod end
+//    	else {
+//    while(rmsi.getNextTuple(rid, returnedData)!=RM_EOF){
+    	int offset = 1;
+        memcpy(&attrOffset, (char*)returnedData+offset, sizeof(int));
+        offset += sizeof(int);
+        attrString.assign((char*)returnedData+offset, (char*)returnedData+offset + attrOffset);
+        offset += attrOffset;
+        memcpy(&attrType, (char*)returnedData+offset, sizeof(int));
+        offset += sizeof(int);
+        memcpy(&attrLen, (char*)returnedData+offset, sizeof(int));
+
+        Attribute attr;
+        attr.name = attrString;
+        attr.type = (AttrType)attrType;
+        attr.length = (AttrLength)attrLen;
+        attrs.push_back(attr);
+//    	}
+    }
+    rbsi.close();
+    _rbfm->closeFile(fh2);
+
+    free(returnedData);
+
+    return 0;
+}
+
+vector<Attribute> RelationManager::tableAttrInRecord() {
+   vector<Attribute> recordDescriptor;
+   Attribute attr;
+
+   attr.name = "table-id";
+   attr.type = TypeInt;
+   attr.length = (AttrLength)4;
+   recordDescriptor.push_back(attr);
+
+   attr.name = "table-name";
+   attr.type = TypeVarChar;
+   attr.length = (AttrLength)50;
+   recordDescriptor.push_back(attr);
+
+   attr.name = "file-name";
+   attr.type = TypeVarChar;
+   attr.length = (AttrLength)50;
+   recordDescriptor.push_back(attr);
+
+   return recordDescriptor;
+}
+
+
+vector<Attribute> RelationManager::columnAttrInRecord() {
+   vector<Attribute> recordDescriptor;
+   Attribute attr;
+
+   attr.name = "table-id";
+   attr.type = TypeInt;
+   attr.length = (AttrLength)4;
+   recordDescriptor.push_back(attr);
+
+   attr.name = "column-name";
+   attr.type = TypeVarChar;
+   attr.length = (AttrLength)50;
+   recordDescriptor.push_back(attr);
+
+   attr.name = "column-type";
+   attr.type = TypeInt;
+   attr.length = (AttrLength)4;
+   recordDescriptor.push_back(attr);
+
+   attr.name = "column-length";
+   attr.type = TypeInt;
+   attr.length = (AttrLength)4;
+   recordDescriptor.push_back(attr);
+
+   attr.name = "column-position";
+   attr.type = TypeInt;
+   attr.length = (AttrLength)4;
+   recordDescriptor.push_back(attr);
+
+   return recordDescriptor;
 }
 
 RC RelationManager::insertTuple(const string &tableName, const void *data, RID &rid)
@@ -299,9 +429,13 @@ RC RelationManager::insertTuple(const string &tableName, const void *data, RID &
 	if (getAttributes(tableName, attrs) != 0) return -1;
 
 	FileHandle fh;
-	if(_rbfm->openFile(tableName, fh) != 0) return -1;
+	int rc = _rbfm->openFile(tableName+".txt", fh);
+	if(rc != 0) return -1;
 
-	if(_rbfm->insertRecord(fh, attrs, data, rid) != 0) return -1;
+//	cout << "finish open file" << endl;
+	int rc1 = _rbfm->insertRecord(fh, attrs, data, rid);
+	if(rc1 != 0) return -1;
+
 	if(_rbfm->closeFile(fh) != 0) return -1;
 
     return 0;
@@ -313,7 +447,7 @@ RC RelationManager::deleteTuple(const string &tableName, const RID &rid)
 	if (getAttributes(tableName, attrs) != 0) return -1;
 
 	FileHandle fh;
-	if(_rbfm->openFile(tableName, fh) != 0) return -1;
+	if(_rbfm->openFile(tableName+".txt", fh) != 0) return -1;
 
 	if(_rbfm->deleteRecord(fh, attrs, rid) != 0) return -1;
 	if(_rbfm->closeFile(fh) != 0) return -1;
@@ -326,7 +460,7 @@ RC RelationManager::updateTuple(const string &tableName, const void *data, const
 	if (getAttributes(tableName, attrs) != 0) return -1;
 
 	FileHandle fh;
-	if(_rbfm->openFile(tableName, fh) != 0) return -1;
+	if(_rbfm->openFile(tableName+".txt", fh) != 0) return -1;
 
 	if(_rbfm->updateRecord(fh, attrs, data, rid) != 0) return -1;
 	if(_rbfm->closeFile(fh) != 0) return -1;
@@ -339,7 +473,7 @@ RC RelationManager::readTuple(const string &tableName, const RID &rid, void *dat
 	if (getAttributes(tableName, attrs) != 0) return -1;
 
 	FileHandle fh;
-	if(_rbfm->openFile(tableName, fh) != 0) return -1;
+	if(_rbfm->openFile(tableName+".txt", fh) != 0) return -1;
 
 	if(_rbfm->readRecord(fh, attrs, rid, data) != 0) return -1;
 	if(_rbfm->closeFile(fh) != 0) return -1;
@@ -348,8 +482,10 @@ RC RelationManager::readTuple(const string &tableName, const RID &rid, void *dat
 
 RC RelationManager::printTuple(const vector<Attribute> &attrs, const void *data)
 {
+	int rc = _rbfm->printRecord(attrs, data);
+    if(rc != 0) return -1;
 
-    return (_rbfm->printRecord(attrs, data));
+    return 0;
 }
 
 RC RelationManager::readAttribute(const string &tableName, const RID &rid, const string &attributeName, void *data)
@@ -358,7 +494,7 @@ RC RelationManager::readAttribute(const string &tableName, const RID &rid, const
 	if (getAttributes(tableName, attrs) != 0) return -1;
 
 	FileHandle fh;
-	if(_rbfm->openFile(tableName, fh) != 0) return -1;
+	if(_rbfm->openFile(tableName+".txt", fh) != 0) return -1;
 
 	if(_rbfm->readAttribute(fh, attrs, rid, attributeName, data) != 0) return -1;
 	if(_rbfm->closeFile(fh) != 0) return -1;
@@ -372,11 +508,12 @@ RC RelationManager::scan(const string &tableName,
       const vector<string> &attributeNames,
       RM_ScanIterator &rm_ScanIterator)
 {
+
 	vector<Attribute> attrs;
 	FileHandle fh;
-	RBFM_ScanIterator rbsi;
+	RBFM_ScanIterator *rbsi = new RBFM_ScanIterator();
 
-	if(_rbfm->openFile(tableName, fh) != 0) return -1;
+	if(_rbfm->openFile(tableName + ".txt", fh) != 0) return -1;
 
 	if(tableName == "Tables.txt") getTableAttr(attrs);
 	else if(tableName == "Columns.txt") getColumnAttr(attrs);
@@ -385,10 +522,10 @@ RC RelationManager::scan(const string &tableName,
 	}
 
 
-	if(_rbfm->scan(fh, attrs, conditionAttribute, compOp, value, attributeNames, rbsi) != 0) return -1;
-	rm_ScanIterator.set_rbsi(&rbsi);
-	rbsi.close();
-	if(_rbfm->closeFile(fh) != 0) return -1;
+	if(_rbfm->scan(fh, attrs, conditionAttribute, compOp, value, attributeNames, *rbsi) != 0) return -1;
+	rm_ScanIterator.set_rbsi(rbsi);
+//	rbsi.close();
+//	if(_rbfm->closeFile(fh) != 0) return -1;
 	return 0;
 }
 

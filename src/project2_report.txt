@@ -1,35 +1,62 @@
 1. Basic information
-Team number (e.g., 01) : 
-#1 Student ID : 
-#1 Student Name : 
-#2 Student ID : 
-#2 Student Name : 
-OS (bit) :
-gcc version :
+Team number (e.g., 01) : 24
+#1 Student ID : 48306907
+#1 Student Name : Sophia Lee
+#2 Student ID : 87204028
+#2 Student Name : Zerui Li
+OS (bit) : 64-bit
+gcc version : gcc (GCC) 4.8.5 (Red Hat 4.8.5-11)
 
 
 2. Meta-data
 - Show your meta-data design (Tables and Columns table) and information about each column.
 
+   (a) “tables” table consists of table-id, table-name, file-name
+   (b) “column” table consists of table-id, column-name, column-type, column-length
+   (c) both tables are added with the extension name “.txt” for identification.
+   (d) when inserting a new table to the system, first scan “tables” with the table-name and then scan “column” with the corresponding table-id. 
+   (e) helper functions “tableAttrInRecord” and “columnAttrInRecord” helps to put the correct attribute format into record
+   (f) helper functions “insertTableRecord” and “insertColumnRecord” are called several times for each row, where 2 rows for “tables” and 9 rows for “column”
+
 
 3. Internal Record Format
 - Show your record format design and describe how your design satisfies O(1) field access. If not, just mention that your team hasn't implemented this feature.
+  [header | null bit | array of fields]
+  (a) record format is designed in variable-length format: a directory with variable-length fields
+  (b) header contains number of fields inside the directory
+  (c) null bit determines whether the value is NULL
+  (d) array of fields contains 2 values: the first one is the field offset while the other is the corresponding value
+  (e) note that field offset is set to uint16_t (unsigned 16-bit) to make sure it is large enough to offset the input data
+  (f) this design satisfies O(1) field access because it does not need to do any comparisons when doing the offset calculations
 - Describe how you store a VarChar field.
+  (a) when offseting the field this design calculates the VarChar length and then retrieves that value
+  (b) 4 bytes from integer size are taken to store that value
 - Describe how you deal with an update and delete.
+  (a) “delete” function uses RID information to find the record’s offset and size, then remove all the memory that is in between offset and free-space-pointer in the record. It removes the entire record from that page.
+  (b) “update” function calls “delete” first to removed any abandoned records. It removes the entire record first from that page (because of “delete”) and then insert a new one to there.
 
 
 4. Page Format
 - Show your page format design.
+  [2 bytes | 2 bytes | (2 bytes, 2 bytes)]
+  (a) the first 2 bytes represent the free space in slot header
+  (b) the next 2 bytes represent the total number of records in the page
+  (c) the last 4 bytes represent a tuple, where the first 2 bytes is the record offset and the last 2 bytes is the record length
 - Describe how you deal with an update and delete.
-
+  (a) “delete” function overwrites the page directory and updates all offsets that are higher than the original one with “0x8000”. It always offsets with “0x8000” because it is the fastest way to see if its bit is set.
+  (b) if “update” function cannot update a new record in the same page while deleting the old one, it updates the directory entry to point to the new RID by calling “insertRecord” function.
 
 5. File Format
 - Show your file format design
-
-
+  (a) every file is followed with this format: “table-name” + “.txt” for every created table
+  (b) to read or write a page we use “fseek” function.
 
 6. Implementation Detail
 - Other implementation details goes here.
+
+- RBFM iterator/scan:
+  (a) “scan” function collects all the columns’ indexes.
+  (b) “getNextRecord” function loops through a new page given that is the first page or it is not the last one. Otherwise, it returns RBFM_EOF (-1) value. If not, it copies all the target attributes into (void)*data following with the correct record structure.
 
 
 7. Other (optional)

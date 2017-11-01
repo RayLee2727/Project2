@@ -5,12 +5,13 @@ typedef unsigned PageNum;
 typedef int RC;
 typedef char byte;
 
-#define PAGE_SIZE 4096
+#define PAGE_SIZE (4096)
 #include <string>
 #include <climits>
-#include<cstring>
-#include<cstdio>
-#include<cstdlib>
+#include <sys/stat.h>
+#include <string.h>
+#include <iostream>
+#include <cstdio>
 using namespace std;
 
 class FileHandle;
@@ -19,6 +20,7 @@ class PagedFileManager
 {
 public:
     static PagedFileManager* instance();                                  // Access to the _pf_manager instance
+    static void DestroyInstance() {delete _pf_manager; _pf_manager = NULL;};
 
     RC createFile    (const string &fileName);                            // Create a new file
     RC destroyFile   (const string &fileName);                            // Destroy a file
@@ -41,6 +43,9 @@ public:
     unsigned readPageCounter;
     unsigned writePageCounter;
     unsigned appendPageCounter;
+    unsigned long fileSize;
+    FILE* openedFile;
+
 
     FileHandle();                                                         // Default constructor
     ~FileHandle();                                                        // Destructor
@@ -50,12 +55,6 @@ public:
     RC appendPage(const void *data);                                      // Append a specific page
     unsigned getNumberOfPages();                                          // Get the number of pages in the file
     RC collectCounterValues(unsigned &readPageCount, unsigned &writePageCount, unsigned &appendPageCount);  // Put the current counter values into variables
-
-    FILE * getFile();
-    void setFile(FILE * fn);
-private:
-    FILE * fileName;
 };
-
 
 #endif

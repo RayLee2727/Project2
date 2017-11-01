@@ -8,7 +8,7 @@
 #include <cstring>
 #include <unordered_set>
 #include <cmath>
-#include<set>
+#include <set>
 
 #include "../rbf/pfm.h"
 
@@ -82,21 +82,23 @@ public:
   // "data" follows the same format as RecordBasedFileManager::insertRecord().
   RC getNextRecord(RID &rid, void *data);
   RC close();
-    
+
 
     FileHandle *fh;
     vector<Attribute> recordDescriptor;
     unsigned short int conditionAttributeIndex;
     CompOp compOp;
     void *value;
-    
-    set<unsigned short int> index;
+
+    class set<short unsigned int> scanSet;
     char *page;
     unsigned short int currSlot;
     unsigned short int lastSlot;
     short int currPageNum;
-    unsigned short int attributeNamesCount;
-    
+    unsigned short int attributeNamesSize;
+    const unsigned short int ALL = 0x1111;
+
+
 private:
     unsigned int vc_comp(string val);
     unsigned int int_comp(int val);
